@@ -27,29 +27,37 @@ Status        : {{.Status}}
 Genres        : {{range .Genres}}{{.Name}} {{end}}
 Rating        : {{.Rating}}
 Studios       : {{range .Studios}}{{.Name}} {{end}}
-================================================================================
+
+================================================================================================================================================================
+
+Synopsis:
 
 {{.Synopsis}}
+{{if .Background}}
+================================================================================================================================================================
 
-================================================================================
+Background:
 
 {{.Background}}
-
-================================================================================
-
+{{end}}
 {{if .RelatedAnimes}}
-	{{range .RelatedAnimes}}
-Title : {{.Node.Title}}
-Relation : {{.RelationType}}
-	{{end}}
+================================================================================================================================================================
 
-================================================================================
+Related Anime:
+	{{- range .RelatedAnimes}}
+
+	Title : {{.Node.Title}}
+	Relation : {{.RelationType}}
+	{{end}}
 {{end}}
 {{if .Recomendations}}
-	{{range .Recomendations}}
-Title : {{.Node.Title}}
-	{{end}}
+================================================================================================================================================================
 
+Recomendations Anime:
+	{{- range .Recomendations}}
+
+	Title : {{.Node.Title}}
+	{{end}}
 {{end}}
 `
 
@@ -59,15 +67,21 @@ type Detail struct {
 	viewport    viewport.Model
 	ready       bool
 	client      *url.Client
+	templ       *template.Template
 }
 
 func NewDetail(c *url.Client) *Detail {
+	templ, err := template.New("anime_detail").Parse(animeTemplate)
+	if err != nil {
+		panic(err)
+	}
 	return &Detail{
 		RawData:     make(map[string]any),
 		AnimeDetail: &entity.Detail{},
 		viewport:    viewport.New(0, 0),
 		ready:       false,
 		client:      c,
+		templ:       templ,
 	}
 }
 
@@ -97,13 +111,15 @@ func (d *Detail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			d.viewport = viewport.New(msg.Width-20, msg.Height-verticalMarginHeight)
 			d.viewport.YPosition = headerHeight
 			d.ready = true
+
+			// TODO: create the placeholder for viewport.Content when there is no data
 		} else {
 			// TODO: change the 20 into something constant
 			d.viewport.Width = msg.Width - 20
 			d.viewport.Height = msg.Height - verticalMarginHeight
-		}
 
-		d.viewport.SetContent(fmt.Sprintf("%v", d.AnimeDetail))
+			// TODO: recreate the viewport.Content based on the new window size
+		}
 	case tea.KeyMsg:
 		switch msg.String() {
 		// TODO: case up, back to the menubar
@@ -119,6 +135,8 @@ func (d *Detail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		d.AnimeDetail = data
+		// TODO: sanitize data that the length is wider than the viewport width
+		// make it readable
 
 		// Generate markdown
 		err := d.generateMarkdown()
@@ -133,7 +151,10 @@ func (d *Detail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		d.viewport.SetContent(string(content))
 
-		// d.viewport.SetContent(fmt.Sprintf("%+v", d.AnimeDetail))
+		err = os.Remove("anime.md")
+		if err != nil {
+			return d, func() tea.Msg { return message.ErrMsg{Err: err} }
+		}
 	}
 
 	d.viewport, cmd = d.viewport.Update(msg)
@@ -158,13 +179,8 @@ func (d Detail) View() string {
 }
 
 func (d Detail) generateMarkdown() error {
-	tmpl, err := template.New("anime_detail").Parse(animeTemplate)
-	if err != nil {
-		return err
-	}
-
 	var buff bytes.Buffer
-	err = tmpl.Execute(&buff, d.AnimeDetail)
+	err := d.templ.Execute(&buff, d.AnimeDetail)
 	if err != nil {
 		return err
 	}
