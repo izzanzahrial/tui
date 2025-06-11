@@ -1,9 +1,10 @@
 package entity
 
 type Anime struct {
-	ID    int    `json:"id"`
-	Title string `json:"title"`
-	Image Image  `json:"main_picture"`
+	ID               int              `json:"id"`
+	Title            string           `json:"title"`
+	Image            Image            `json:"main_picture"`
+	AlternativeTitle AlternativeTitle `json:"alternative_titles"`
 }
 
 type Image struct {

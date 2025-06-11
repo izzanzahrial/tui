@@ -68,6 +68,8 @@ func (c *Client) AnimeRank(typeRank RankingType, limit, offset *int) tea.Msg {
 	}
 	request.SetQueryParam("ranking_type", rankingType)
 
+	request.SetQueryParam("fields", "alternative_titles")
+
 	_, err := request.Get(airingAnimeUrl.String())
 	if err != nil {
 		return message.ErrMsg{Err: err}

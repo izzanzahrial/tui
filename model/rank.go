@@ -43,6 +43,7 @@ func NewRank() Rank {
 	columns := []table.Column{
 		{Title: "Rank", Width: 4},
 		{Title: "Title", Width: 40},
+		{Title: "Japanese Title", Width: 40},
 	}
 	t := table.New(
 		table.WithColumns(columns),
@@ -279,9 +280,17 @@ func (r Rank) View() string {
 	case "Rank":
 		var rows []table.Row
 		for _, anime := range r.Anime.AnimeRank {
+			var title string
+			if anime.Anime.AlternativeTitle.EngTitle == "" {
+				title = anime.Anime.Title
+			} else {
+				title = anime.Anime.AlternativeTitle.EngTitle
+			}
+
 			rows = append(rows, table.Row{
 				strconv.Itoa(anime.Rank.Rank),
-				anime.Anime.Title,
+				title,
+				anime.Anime.AlternativeTitle.JpnTitle,
 			})
 		}
 		r.rankTable.SetRows(rows)

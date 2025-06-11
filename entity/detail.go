@@ -19,7 +19,7 @@ type Detail struct {
 // we only care about the english and japan alternative title
 type AlternativeTitle struct {
 	EngTitle string `json:"en"`
-	JaTitle  string `json:"ja"`
+	JpnTitle string `json:"ja"`
 }
 
 type Genre struct {
