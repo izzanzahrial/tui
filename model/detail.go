@@ -16,6 +16,10 @@ import (
 	"github.com/izzanzahrial/tui/url"
 )
 
+// TODO: handle when certain data is zero
+// e.g. data background of 'To Be Hero X' ID '53447'
+// even though already using omitzero within the entity.Detail json tag
+// within the template still show empty string
 const animeTemplate = `
 #{{.AlternativeTitle.EngTitle}} 
 > Relased : {{.StartDate}}
@@ -32,15 +36,12 @@ Studios       : {{range .Studios}}{{.Name}} {{end}}
 
 Synopsis:
 
-{{.Synopsis}}
-{{if .Background}}
+{{.Synopsis}} {{if ne .Background ""}}
 ================================================================================================================================================================
 
 Background:
 
-{{.Background}}
-{{end}}
-{{if .RelatedAnimes}}
+{{.Background}} {{end}} {{if .RelatedAnimes}}
 ================================================================================================================================================================
 
 Related Anime:
@@ -48,9 +49,7 @@ Related Anime:
 
 	Title : {{.Node.Title}}
 	Relation : {{.RelationType}}
-	{{end}}
-{{end}}
-{{if .Recomendations}}
+	{{end}} {{end}} {{if .Recomendations}}
 ================================================================================================================================================================
 
 Recomendations Anime:
@@ -134,9 +133,7 @@ func (d *Detail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return d, func() tea.Msg { return message.ErrMsg{Err: fmt.Errorf("failed to get detail")} }
 		}
 
-		d.AnimeDetail = data
-		// TODO: sanitize data that the length is wider than the viewport width
-		// make it readable
+		d.sanitizeAndSetContent(data)
 
 		// Generate markdown
 		err := d.generateMarkdown()
@@ -176,6 +173,45 @@ func (d Detail) View() string {
 		d.viewport.View(),
 		d.footerView(),
 	)
+}
+
+// TODO: can do this better, when the cut is within a word
+// we can postponed the cut to the next word or add - to the end
+func (d *Detail) sanitizeAndSetContent(data *entity.Detail) {
+	var newSynopsis strings.Builder
+	// TODO: do something with number 4, make it a constant
+	// and handle dynamic width
+	width := d.viewport.Width - 4
+	// split the synopsis into paragraphs
+	splitedSynopsis := strings.Split(data.Synopsis, "\n")
+	for _, line := range splitedSynopsis {
+		// within each paragraph, split into lines that are less than the viewport width
+		for len(line) > width {
+			newLine := line[:width]
+			line = line[width:]
+			newSynopsis.WriteString(newLine + "\n")
+		}
+
+		// add the rest of the line and new line for the next paragraph
+		newSynopsis.WriteString(line + "\n")
+	}
+
+	var newBackground strings.Builder
+	splitedBackground := strings.Split(data.Background, "\n")
+	for _, line := range splitedBackground {
+		for len(line) > width {
+			newLine := line[:width]
+			line = line[width:]
+			newBackground.WriteString(newLine + "\n")
+		}
+
+		// add the rest of the line and new line for the next paragraph
+		newBackground.WriteString(line + "\n")
+	}
+
+	d.AnimeDetail = data
+	d.AnimeDetail.Synopsis = newSynopsis.String()
+	d.AnimeDetail.Background = newBackground.String()
 }
 
 func (d Detail) generateMarkdown() error {

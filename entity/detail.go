@@ -10,7 +10,7 @@ type Detail struct {
 	Status           string           `json:"status"`
 	Genres           []Genre          `json:"genres"`
 	Rating           string           `json:"rating`
-	Background       string           `json:"background"`
+	Background       string           `json:"background,omitzero"`
 	RelatedAnimes    []RelatedAnime   `json:"related_anime"`
 	Recomendations   []Recomendation  `json:"recommendations"`
 	Studios          []Studio         `json:"studios"`
