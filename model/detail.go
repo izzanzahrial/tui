@@ -92,13 +92,10 @@ func (d *Detail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		titleHeight := lipgloss.Height(style.Title.Render())
-		// TODO: change the 1 and 5 into something constant
-		menubarHeight := 6 // this is supposed to be the height of the menubar, but since it bounds to the rank model methods, it will be 6
 		headerHeight := lipgloss.Height(d.headerView())
 		footerHeight := lipgloss.Height(d.footerView())
-		verticalMarginHeight := headerHeight + footerHeight + titleHeight + menubarHeight
-
+		verticalMarginHeight := headerHeight + footerHeight
+		fmt.Println("DETAIL ", msg.Height, msg.Width, verticalMarginHeight)
 		if !d.ready {
 			// Since this program is using the full size of the viewport we
 			// need to wait until we've received the window dimensions before
@@ -106,24 +103,15 @@ func (d *Detail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// quickly, though asynchronously, which is why we wait for them
 			// here.
 
-			// TODO: change the 20 into something constant
-			d.viewport = viewport.New(msg.Width-20, msg.Height-verticalMarginHeight)
+			d.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight-5)
 			d.viewport.YPosition = headerHeight
 			d.ready = true
-
-			// TODO: create the placeholder for viewport.Content when there is no data
 		} else {
-			// TODO: change the 20 into something constant
-			d.viewport.Width = msg.Width - 20
-			d.viewport.Height = msg.Height - verticalMarginHeight
-
-			// TODO: recreate the viewport.Content based on the new window size
+			d.viewport.Width = msg.Width
+			d.viewport.Height = msg.Height - verticalMarginHeight - 5
 		}
 	case tea.KeyMsg:
 		switch msg.String() {
-		// TODO: case up, back to the menubar
-		case "esc":
-			return d, func() tea.Msg { return message.BackToMenubarMsg{} }
 		case "ctrcl+c", "q":
 			return d, tea.Quit
 		}

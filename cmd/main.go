@@ -16,7 +16,7 @@ func main() {
 	}
 
 	p := tea.NewProgram(
-		model.NewRank(),
+		model.New(),
 		// tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
 		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
 	)

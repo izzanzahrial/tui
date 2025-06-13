@@ -12,6 +12,8 @@ type BackToMenubarMsg struct{}
 // Rank Page Message
 // type BackToRankMsg struct{}
 
+type RankMsg struct{}
+
 // Detail Page Message
 type DetailMsg struct {
 	ID int
