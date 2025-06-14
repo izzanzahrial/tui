@@ -5,12 +5,11 @@ import (
 	"os"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/izzanzahrial/tui/entity"
 	"github.com/izzanzahrial/tui/message"
 )
 
-func (c *Client) AnimeDetail(id int) tea.Msg {
+func (c *Client) AnimeDetail(id int) (*entity.Detail, error) {
 	var airingAnimeUrl strings.Builder
 	airingAnimeUrl.WriteString(baseURL)
 	airingAnimeUrl.WriteString("/{id}")
@@ -38,8 +37,8 @@ func (c *Client) AnimeDetail(id int) tea.Msg {
 
 	_, err := request.Get(airingAnimeUrl.String())
 	if err != nil {
-		return message.ErrMsg{Err: err}
+		return nil, message.ErrMsg{Err: err}
 	}
 
-	return data
+	return data, nil
 }

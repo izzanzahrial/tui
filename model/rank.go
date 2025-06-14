@@ -24,10 +24,7 @@ type Rank struct {
 }
 
 func NewRank(c *url.Client) *Rank {
-	sp := spinner.New()
-	// spinner style
-	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("205"))))
 
 	columns := []table.Column{
 		{Title: "Rank", Width: 4},
@@ -37,19 +34,13 @@ func NewRank(c *url.Client) *Rank {
 
 	t := table.New(
 		table.WithColumns(columns),
-		table.WithFocused(false),
+		table.WithFocused(true), // Start focused by default
+		table.WithHeight(10),    // Initial height, will be resized
 	)
 
 	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(false)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Bold(false)
+	s.Header = s.Header.BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240")).BorderBottom(true).Bold(false)
+	s.Selected = s.Selected.Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(false)
 	t.SetStyles(s)
 
 	return &Rank{
@@ -64,16 +55,16 @@ func NewRank(c *url.Client) *Rank {
 
 // initialRequest fetches the first batch of data needed for the rank view
 func (r Rank) initialRequest() tea.Msg {
-	data, ok := r.client.AnimeRank(0, nil, nil).(*entity.Data)
-	if !ok {
-		return message.ErrMsg{Err: fmt.Errorf("failed to fetch initial data")}
+	data, err := r.client.AnimeRank(0, nil, nil)
+	if err != nil {
+		return message.ErrMsg{Err: fmt.Errorf("failed to fetch anime ranks: %w", err)}
 	}
 
 	return data
 }
 
 func (r Rank) Init() tea.Cmd {
-	return tea.Batch(r.spinner.Tick, r.initialRequest)
+	return r.spinner.Tick
 }
 
 func (r *Rank) Focused() bool {
@@ -94,7 +85,8 @@ func (r *Rank) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		r.table.SetWidth(msg.Width)
-		r.table.SetHeight(msg.Height - 6)
+		r.table.SetHeight(msg.Height)
+		return r, nil
 
 	case *entity.Data:
 		r.anime = msg
@@ -102,36 +94,35 @@ func (r *Rank) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			r.animeMap[v.Rank.Rank] = &v
 		}
 
-		var rows []table.Row
-		for _, anime := range r.anime.AnimeRank {
-			var title string
-			if anime.Anime.AlternativeTitle.EngTitle == "" {
+		rows := make([]table.Row, len(r.anime.AnimeRank))
+		for i, anime := range r.anime.AnimeRank {
+			title := anime.Anime.AlternativeTitle.EngTitle
+			if title == "" {
 				title = anime.Anime.Title
-			} else {
-				title = anime.Anime.AlternativeTitle.EngTitle
 			}
-
-			rows = append(rows, table.Row{
-				strconv.Itoa(anime.Rank.Rank),
-				title,
-				anime.Anime.AlternativeTitle.JpnTitle,
-			})
+			rows[i] = table.Row{strconv.Itoa(anime.Rank.Rank), title, anime.Anime.AlternativeTitle.JpnTitle}
 		}
 		r.table.SetRows(rows)
-		r.Focus()
 		r.isLoading = false
+		return r, nil // No further command needed
 
 	case tea.KeyMsg:
+		// Don't handle keys if we're not focused.
+		if !r.table.Focused() {
+			return r, nil
+		}
+
 		switch msg.String() {
-		case "ctrcl+c", "q":
-			return r, tea.Quit
 		case "enter", " ":
-			r.Blur()
-			rank := r.table.SelectedRow()[0]
-			rankInt, err := strconv.Atoi(rank)
+			if len(r.table.SelectedRow()) == 0 {
+				return r, nil
+			}
+
+			rankStr := r.table.SelectedRow()[0]
+			rankInt, err := strconv.Atoi(rankStr)
 			if err != nil {
 				return r, func() tea.Msg {
-					return message.ErrMsg{Err: fmt.Errorf("error parsing rank [%s]: %w", rank, err)}
+					return message.ErrMsg{Err: fmt.Errorf("error parsing rank [%s]: %w", rankStr, err)}
 				}
 			}
 
@@ -142,27 +133,24 @@ func (r *Rank) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			// Send message to switch to the detail view
 			return r, func() tea.Msg { return message.DetailMsg{ID: anime.Anime.ID} }
 		}
-
-	case message.RankMsg:
-		r.Focus()
 	}
 
 	if r.isLoading {
-		var cmd tea.Cmd
 		r.spinner, cmd = r.spinner.Update(msg)
 		return r, cmd
 	}
 
-	t, cmd := r.table.Update(msg)
-	r.table = &t
+	*r.table, cmd = r.table.Update(msg)
 	return r, cmd
 }
 
 func (r Rank) View() string {
 	if r.isLoading {
-		return lipgloss.JoinHorizontal(lipgloss.Center, r.spinner.View(), "Loading...")
+		loadingStyle := lipgloss.NewStyle().Width(r.table.Width()).Height(r.table.Height()).Align(lipgloss.Center, lipgloss.Center)
+		return loadingStyle.Render(lipgloss.JoinHorizontal(lipgloss.Center, r.spinner.View(), " Loading..."))
 	}
 	return baseStyle.Align(lipgloss.Left).Render(r.table.View())
 }

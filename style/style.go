@@ -57,4 +57,13 @@ var (
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderTop(true).
 		BorderForeground(Subtle)
+
+	DetailTitle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FAFAFA")).
+			Background(lipgloss.Color("#7D56F4")).
+			Bold(true).
+			Padding(0, 1)
+
+	Separator = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240"))
 )

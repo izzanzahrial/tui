@@ -1,7 +1,6 @@
 package model
 
 import (
-	"fmt"
 	"log"
 	"strings"
 
@@ -13,17 +12,28 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var baseStyle = lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240"))
+const (
+	// How much vertical space the title and menubar occupy.
+	mainHeaderHeight = 2
+	// Any additional vertical padding for the main content area.
+	mainVerticalPadding = 1
+)
+
+var baseStyle = lipgloss.NewStyle().
+	BorderStyle(lipgloss.RoundedBorder()).
+	BorderForeground(lipgloss.Color("240")).
+	Padding(0, 1)
 
 type Main struct {
 	// General
-	width  int
-	height int
+	width        int
+	height       int
+	contentWidth int
+	err          error
 
 	// Menubar
 	menubar []string
 	cursor  int
-	focus   bool
 
 	// Rank Page
 	rank *Rank
@@ -38,7 +48,6 @@ func New() Main {
 	menubar := []string{"Rank", "Detail", "Search"}
 
 	c := url.NewClient()
-
 	r := NewRank(c)
 	d := NewDetail(c)
 
@@ -46,29 +55,28 @@ func New() Main {
 		rank:    r,
 		menubar: menubar,
 		cursor:  0,
-		focus:   true,
 		detail:  d,
 		client:  c,
 	}
 }
 
 func (m Main) Init() tea.Cmd {
-	return m.rank.Init()
-}
-
-func (m Main) Focused() bool {
-	return m.focus
-}
-
-func (m *Main) Focus() {
-	m.focus = true
-}
-
-func (m *Main) Blur() {
-	m.focus = false
+	return m.rank.initialRequest
 }
 
 func (m Main) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// If we're in an error state, the only thing we care about is the key press
+	// to dismiss the error.
+	if m.err != nil {
+		if msg, ok := msg.(tea.KeyMsg); ok {
+			switch msg.String() {
+			case "enter", "esc", "q":
+				m.err = nil // Clear the error
+			}
+		}
+		return m, nil
+	}
+
 	// tea.Cmd this is used if you want to set new value to the current UI
 	// e.g you have a textInput.Model that you want to update with a new user inputed value
 	var (
@@ -83,36 +91,37 @@ func (m Main) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		// TODO: move title height and menubar height to constants
-		titleHeight := lipgloss.Height(style.Title.Render())
-		menubarHeight := lipgloss.Height(m.generateMenubar())
+		// Calculate the final content width
+		// by subtracting the horizontal space taken by the baseStyle's border and padding.
+		horizontalMargin := baseStyle.GetHorizontalFrameSize()
+		m.contentWidth = m.width - horizontalMargin
 
-		// TODO: do something with the number 20 and 2
-		msg.Width = msg.Width - 20
-		msg.Height = msg.Height - titleHeight - menubarHeight + 2
-		fmt.Println("Main ", msg.Height, msg.Width)
+		// Calculate the height available for child models.
+		borderHeight := baseStyle.GetVerticalFrameSize()
+		contentHeight := m.height - mainHeaderHeight - mainVerticalPadding - borderHeight
+
+		// Create the message for child models with the correct dimensions.
+		childMsg := tea.WindowSizeMsg{Width: m.contentWidth, Height: contentHeight}
+
 		// Update the child models with the new dimensions *immediately* and collect their commands
-		rank, cmd := m.rank.Update(msg)
-		newRank, ok := rank.(*Rank)
-		if !ok {
-			panic("rank is not of type *Rank")
+		rank, cmd := m.rank.Update(childMsg)
+		if r, ok := rank.(*Rank); ok {
+			m.rank = r
 		}
-		m.rank = newRank
 		cmds = append(cmds, cmd)
 
-		detail, cmd := m.detail.Update(msg)
-		newDetail, ok := detail.(*Detail)
-		if !ok {
-			panic("detail is not of type *Detail")
+		detail, cmd := m.detail.Update(childMsg)
+		if d, ok := detail.(*Detail); ok {
+			m.detail = d
 		}
-		m.detail = newDetail
 		cmds = append(cmds, cmd)
+
 		return m, tea.Batch(cmds...)
 
-	// TODO: do something with the error
 	case message.ErrMsg:
-		log.Println("Error: ", msg.Error())
-		return m, tea.Quit
+		m.err = msg.Err                              // Set the error
+		log.Printf("An error occurred: %v", msg.Err) // Log the technical details
+		return m, nil
 
 	// if key press
 	case tea.KeyMsg:
@@ -129,58 +138,41 @@ func (m Main) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.cursor = len(m.menubar) - 1
 			}
-		case "down", "j":
-			m.Blur()
 		case "ctrcl+c", "q":
 			return m, tea.Quit
 		}
 
+	// The main update switch at the bottom will handle passing subsequent messages.
 	case message.RankMsg:
 		m.cursor = 0
-		rank, cmd := m.rank.Update(msg)
-		newRank, ok := rank.(*Rank)
-		if !ok {
-			panic("rank is not of type *Rank")
-		}
-		m.rank = newRank
-		cmds = append(cmds, cmd)
-
-		// return m, tea.Batch(cmds...)
+		m.rank.Focus()
 
 	case message.DetailMsg:
 		m.cursor = 1
-		detail, cmd := m.detail.Update(msg)
-		newDetail, ok := detail.(*Detail)
-		if !ok {
-			panic("detail is not of type *Detail")
-		}
-		m.detail = newDetail
-		cmds = append(cmds, cmd)
-
-		// return m, tea.Batch(cmds...)
+		m.detail.Focus()
 	}
 
-	// Pass messages down to the active child model.
+	// Delegate messages down to the active child model.
+	var cmd tea.Cmd
 	switch m.menubar[m.cursor] {
 	case "Rank":
 		m.rank.Focus()
-		rank, cmd := m.rank.Update(msg)
-		newRank, ok := rank.(*Rank)
-		if !ok {
-			panic("rank is not of type *Rank")
+		m.detail.Blur()
+		rank, newCmd := m.rank.Update(msg)
+		if r, ok := rank.(*Rank); ok {
+			m.rank = r
 		}
-		m.rank = newRank
-		cmds = append(cmds, cmd)
+		cmd = newCmd
 	case "Detail":
-		detail, cmd := m.detail.Update(msg)
-		newDetail, ok := detail.(*Detail)
-		if !ok {
-			panic("detail is not of type *Detail")
+		m.rank.Blur()
+		m.detail.Focus()
+		detail, newCmd := m.detail.Update(msg)
+		if d, ok := detail.(*Detail); ok {
+			m.detail = d
 		}
-		m.detail = newDetail
-		cmds = append(cmds, cmd)
+		cmd = newCmd
 	}
-
+	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
 
@@ -199,17 +191,18 @@ func (m Main) generateMenubar() string {
 		lipgloss.Top,
 		menu...,
 	)
-
-	return menubar
+	gap := style.TabGap.Render(strings.Repeat(" ", max(0, m.contentWidth-lipgloss.Width(menubar))))
+	return lipgloss.JoinHorizontal(lipgloss.Bottom, menubar, gap)
 }
 
 func (m Main) View() string {
-	// Page that being displayed is depend on the largest width and tallest height of content
-	// in this case is the gap, which is from the end menubar (search tab) to the end of the window
-	menubar := m.generateMenubar()
-	// TODO: change the 20 into something constant
-	gap := style.TabGap.Render(strings.Repeat(" ", max(0, m.width-lipgloss.Width(menubar)-20)))
-	menubar = lipgloss.JoinHorizontal(lipgloss.Bottom, menubar, gap)
+	if m.err != nil {
+		return m.errorView(m.width, m.height)
+	}
+
+	// The title should be rendered inside a container that can be constrained.
+	// We'll set the width of the title's container to the contentWidth.
+	title := lipgloss.NewStyle().Width(m.contentWidth).Render(style.Title.Render())
 
 	var body string
 	switch m.menubar[m.cursor] {
@@ -219,18 +212,38 @@ func (m Main) View() string {
 		body = m.detail.View()
 	}
 
-	return lipgloss.Place(
-		m.width,
-		m.height,
-		lipgloss.Center,
-		lipgloss.Center,
-		baseStyle.Render(
-			lipgloss.JoinVertical(
-				lipgloss.Left,
-				style.Title.Render(),
-				menubar,
-				body,
-			),
-		),
+	mainContent := lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		m.generateMenubar(),
+		body,
 	)
+
+	return baseStyle.Render(mainContent)
+}
+
+func (m Main) errorView(width, height int) string {
+	errorHeader := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#F1F1F1")).
+		Background(lipgloss.Color("#FF5F87")).
+		Bold(true).
+		Padding(0, 1).
+		Render(" Oh No! An Error Occurred ")
+
+	errorBody := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("252")).
+		Padding(1).
+		Render(m.err.Error())
+
+	helpText := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("244")).
+		Render("Press Enter or Esc to continue...")
+
+	errorBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#FF5F87")).
+		Render(lipgloss.JoinVertical(lipgloss.Center, errorHeader, errorBody, helpText))
+
+	// Place the error box in the center of the screen.
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, errorBox)
 }

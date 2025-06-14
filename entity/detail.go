@@ -12,7 +12,7 @@ type Detail struct {
 	Rating           string           `json:"rating`
 	Background       string           `json:"background,omitzero"`
 	RelatedAnimes    []RelatedAnime   `json:"related_anime"`
-	Recomendations   []Recomendation  `json:"recommendations"`
+	Recomendations   []Recommendation `json:"recommendations"`
 	Studios          []Studio         `json:"studios"`
 }
 
@@ -26,12 +26,14 @@ type Genre struct {
 	Name string `json:"name"`
 }
 
+func (g Genre) GetName() string { return g.Name }
+
 type RelatedAnime struct {
 	Node         Node   `json:"node"`
 	RelationType string `json:"relation_type_formatted"`
 }
 
-type Recomendation struct {
+type Recommendation struct {
 	Node Node `json:"node"`
 }
 
@@ -44,3 +46,5 @@ type Studio struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
 }
+
+func (s Studio) GetName() string { return s.Name }

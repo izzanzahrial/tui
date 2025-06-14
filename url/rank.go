@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/izzanzahrial/tui/entity"
 	"github.com/izzanzahrial/tui/message"
 )
@@ -41,7 +40,7 @@ var ranks = map[RankingType]string{
 	favorite:     "favorite",
 }
 
-func (c *Client) AnimeRank(typeRank RankingType, limit, offset *int) tea.Msg {
+func (c *Client) AnimeRank(typeRank RankingType, limit, offset *int) (*entity.Data, error) {
 	var airingAnimeUrl strings.Builder
 	airingAnimeUrl.WriteString(baseURL)
 	airingAnimeUrl.WriteString("/ranking")
@@ -72,8 +71,8 @@ func (c *Client) AnimeRank(typeRank RankingType, limit, offset *int) tea.Msg {
 
 	_, err := request.Get(airingAnimeUrl.String())
 	if err != nil {
-		return message.ErrMsg{Err: err}
+		return nil, message.ErrMsg{Err: err}
 	}
 
-	return data
+	return data, nil
 }
